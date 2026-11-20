@@ -5,6 +5,7 @@ Every Claude session on all your PCs, on all your accounts, in one browser windo
 - **Watch** every session's transcript live, with each account's usage.
 - **Reply** to a session: on a PC with `claudeSwitcher.remoteReplies` on, flip the session's **Remote** switch. Your reply goes in as your own prompt once Claude is idle.
 - **Answer Claude's prompts** in Remote sessions: allow or deny a tool, answer a question, approve a plan.
+- **Run the session**: change its model, effort and permission mode, see its subagents and context, **Compact now**, run its slash commands, or move it to another account.
 - **Send images** with a reply: paste, drop or attach up to 4.
 - **Stop** a Remote session mid-turn.
 - **Get notified** when Claude is waiting on you (the bell), even with the app closed. Install it from the browser (on iPhone: Share, then Add to Home Screen) for an app of its own.

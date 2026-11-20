@@ -1,5 +1,5 @@
 import { Keys, deriveKeys, normalizeUsername, seal, toBase64, unseal } from './crypto';
-import { Down, DownMessage, PcState, PromptAnswer, Row, UpMessage, downLabel, stateLabel, upLabel } from './types';
+import { CommandInfo, Down, DownMessage, PcState, PromptAnswer, Row, SessionAction, UpMessage, downLabel, stateLabel, upLabel } from './types';
 
 /** A PC as the relay reports it, with its state once decrypted. */
 export interface Pc {
@@ -42,6 +42,10 @@ export class Remote {
   readonly transcripts = new Map<string, Transcript>();
   /** Replies sent from this tab, by message id. */
   readonly replies = new Map<string, Reply>();
+  /** What became of each control and move sent from this tab, by message id. */
+  readonly results = new Map<string, { ok: boolean; text?: string; error?: string }>();
+  /** Each session's slash commands, once asked for. */
+  readonly commands = new Map<string, CommandInfo[]>();
   /** Sessions started from this tab, by message id. */
   readonly starts = new Map<string, { pc: string; status: 'starting' | 'started' | 'refused'; session?: string; reason?: string }>();
   /** Answers sent to Claude's prompts, by prompt id: in flight, or why the PC refused one. */
@@ -125,6 +129,10 @@ export class Remote {
     this.changed();
   }
 
+  sessionCommands(pc: string, session: string): CommandInfo[] | undefined {
+    return this.commands.get(key(pc, session));
+  }
+
   transcript(pc: string, session: string): Transcript | undefined {
     return this.transcripts.get(key(pc, session));
   }
@@ -204,6 +212,26 @@ export class Remote {
     this.changed();
     if (!(await this.tell(pc, { type: 'start', account, repo, text }, ref))) {
       this.starts.set(ref, { pc, status: 'refused', reason: 'The PC couldn’t be reached.' });
+      this.changed();
+    }
+    return ref;
+  }
+
+  /** Asks a session to change something (model, effort, mode), compact, list or run a command; resolves the message id. */
+  async control(pc: string, session: string, action: SessionAction): Promise<string> {
+    const ref = crypto.randomUUID();
+    if (!(await this.tell(pc, { type: 'control', session, action }, ref))) {
+      this.results.set(ref, { ok: false, error: 'The PC couldn’t be reached.' });
+      this.changed();
+    }
+    return ref;
+  }
+
+  /** Moves a session to another saved account; it restarts on it. */
+  async move(pc: string, session: string, account: string): Promise<string> {
+    const ref = crypto.randomUUID();
+    if (!(await this.tell(pc, { type: 'move', session, account }, ref))) {
+      this.results.set(ref, { ok: false, error: 'The PC couldn’t be reached.' });
       this.changed();
     }
     return ref;
@@ -344,6 +372,11 @@ export class Remote {
           loaded: true,
           missing: msg.missing,
         });
+      } else if (msg.type === 'action') {
+        this.results.set(msg.ref, { ok: msg.ok, text: msg.text, error: msg.error });
+        if (msg.commands) {
+          this.commands.set(key(data.pc, msg.session), msg.commands);
+        }
       } else if (msg.type === 'started') {
         const start = this.starts.get(msg.ref);
         if (start) {

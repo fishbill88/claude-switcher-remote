@@ -30,6 +30,33 @@ export interface Session {
   working: boolean;
   /** Its Remote switch: replies from this app reach it. */
   remote?: boolean;
+  /** What its session-account mod reports: model, effort, mode, context, subagents. */
+  live?: SessionLive;
+}
+
+export interface SessionLive {
+  model?: string;
+  models?: string[];
+  effort?: string;
+  mode?: string;
+  pendingMode?: string;
+  context?: { percent?: number; tokens?: number; window?: number };
+  agents?: { id: string; name?: string; description: string; type: string; status: string }[];
+  busy?: boolean;
+}
+
+export type SessionAction =
+  | { kind: 'model'; value: string }
+  | { kind: 'effort'; value: string }
+  | { kind: 'mode'; value: string }
+  | { kind: 'compact' }
+  | { kind: 'commands' }
+  | { kind: 'command'; name: string; args?: string };
+
+export interface CommandInfo {
+  name: string;
+  description: string;
+  source: string;
 }
 
 export interface PcState {
@@ -87,7 +114,9 @@ export type Down =
   | { type: 'upload'; session: string; upload: string; part: number; parts: number; mime: string; data: string }
   | { type: 'answer'; session: string; prompt: string; answer: PromptAnswer }
   | { type: 'start'; account: string; repo: string; text: string }
-  | { type: 'stop'; session: string };
+  | { type: 'stop'; session: string }
+  | { type: 'control'; session: string; action: SessionAction }
+  | { type: 'move'; session: string; account: string };
 export type DownMessage = { id: string; at: number; epoch: string } & Down;
 export type SendStatus = 'queued' | 'delivered' | 'refused';
 export type UpMessage = { id: string; at: number } & (
@@ -95,6 +124,7 @@ export type UpMessage = { id: string; at: number } & (
   | { type: 'sent'; session: string; ref: string; status: SendStatus; reason?: string }
   | { type: 'answered'; session: string; ref: string; reason: string }
   | { type: 'started'; ref: string; session?: string; reason?: string }
+  | { type: 'action'; session: string; ref: string; ok: boolean; text?: string; error?: string; commands?: CommandInfo[] }
 );
 
 export const stateLabel = (pc: string) => `relay:state:${pc}`;

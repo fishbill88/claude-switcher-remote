@@ -10,7 +10,7 @@ import './styles.css';
 import { deriveKeys } from './crypto';
 import { forget, passkeysSupported, recall, remember, remembered } from './device';
 import { Pc, Remote, SignInError } from './remote';
-import type { Account, Limit, Prompt, PromptAnswer, Row, Session } from './types';
+import type { Account, Limit, Prompt, PromptAnswer, Row, Session, SessionAction } from './types';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -274,10 +274,13 @@ function drawBar(): void {
     .join('');
   const conn = $('conn');
   conn.className = `conn ${remote!.connected ? '' : 'off'}`;
-  conn.innerHTML = `<span class="dot"></span>${remote!.connected ? 'Live' : 'Reconnecting…'}`;
+  conn.innerHTML = `<span class="dot"></span><span class="conn-text">${remote!.connected ? 'Live' : 'Reconnecting…'}</span>`;
   $('new-btn').hidden = !startablePcs().length;
   if (sheet) {
     drawSheet();
+  }
+  if (commandSheet) {
+    drawCommandSheet();
   }
 }
 
@@ -347,6 +350,9 @@ function drawMain(): void {
     $('main-head').innerHTML = '';
     $('main-head').hidden = true;
     $('response').hidden = true;
+    $('controls').hidden = true;
+    $('agents-panel').hidden = true;
+    controlsKey = '';
     ui.drawn = { key: '', rows: undefined, loaded: false, count: 0 };
     $('transcript').innerHTML = pcList().length
       ? `<div class="empty-big"><span class="serif">Pick a session</span><span>Its transcript appears here and follows along live.</span></div>`
@@ -380,6 +386,7 @@ function drawMain(): void {
         : `<span class="ro">${icon('i-eye', 14)}Read-only</span>`
     }`;
   drawResponse(pc, session);
+  drawControls(pc, session);
   drawTranscript();
 }
 
@@ -525,6 +532,160 @@ function toast(text: string): void {
   toastTimer = window.setTimeout(() => t.classList.remove('on'), 4000);
 }
 
+// ---------- session controls: model, effort, mode, context, subagents, commands, account ----------
+
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const MODES: [string, string][] = [
+  ['default', 'Ask'],
+  ['acceptEdits', 'Accept edits'],
+  ['auto', 'Auto'],
+];
+const MODE_NAMES: Record<string, string> = { default: 'Ask', acceptEdits: 'Accept edits', auto: 'Auto', plan: 'Plan', bypassPermissions: 'Bypass', dontAsk: 'Don’t ask' };
+let controlsKey = '';
+let agentsOpen = false;
+/** On a phone the controls fold into one line until opened. */
+let controlsOpen = false;
+/** Controls sent from this tab, waiting for the session to say how they went. */
+const pendingResults = new Map<string, string>();
+
+/**
+ * The strip under the session's title. Read-only unless the session takes the web app's say (replies on, Remote on);
+ * redrawn only when what it shows changes, and never under an open dropdown.
+ */
+function drawControls(pc: Pc, session: Session | undefined): void {
+  const live = session?.live;
+  const box = $('controls');
+  const panel = $('agents-panel');
+  if (!session || !live || !pc.online) {
+    box.hidden = true;
+    panel.hidden = true;
+    controlsKey = '';
+    return;
+  }
+  const can = !!(pc.state?.replies && session.remote);
+  const accounts = (pc.state?.accounts ?? []).filter((a) => a.pinnable);
+  const current = accounts.find((a) => a.id === session.accountId);
+  const key = JSON.stringify([session.id, can, live, accounts.map((a) => a.id), session.accountId, agentsOpen, controlsOpen]);
+  // An open dropdown is never redrawn under the pointer; a button that keeps focus after a click doesn't hold it back.
+  if (key === controlsKey || (document.activeElement instanceof HTMLSelectElement && box.contains(document.activeElement))) {
+    drawResults();
+    return;
+  }
+  controlsKey = key;
+  const dis = can ? '' : 'disabled';
+  const option = (value: string, label: string, selected: boolean) => `<option value="${esc(value)}" ${selected ? 'selected' : ''}>${esc(label)}</option>`;
+  const models = live.models?.length ? live.models : live.model ? [live.model] : [];
+  const modelValue = models.find((m) => live.model?.includes(m)) ?? live.model ?? '';
+  const percent = live.context?.percent;
+  const agents = live.agents ?? [];
+  const running = agents.filter((a) => a.status === 'running').length;
+  box.hidden = false;
+  box.classList.toggle('open', controlsOpen);
+  const summary = [live.model ?? '—', live.effort, MODE_NAMES[live.pendingMode ?? live.mode ?? ''], percent === undefined ? undefined : `${Math.round(percent)}% context`].filter(Boolean).join(' · ');
+  box.innerHTML = `
+    <button class="ctl-summary" type="button" data-act="ctl-toggle" aria-expanded="${controlsOpen}">${esc(summary)}<span aria-hidden="true">${controlsOpen ? '▴' : '▾'}</span></button>
+    <label class="ctl"><span>Model</span><select data-ctl="model" ${dis}>${
+      models.includes(modelValue) ? '' : option(modelValue, live.model ?? '—', true)
+    }${models.map((m) => option(m, m, m === modelValue)).join('')}</select></label>
+    <label class="ctl"><span>Effort</span><select data-ctl="effort" ${dis}>${live.effort ? '' : option('', '—', true)}${EFFORTS.map((e) => option(e, e, e === live.effort)).join('')}</select></label>
+    <label class="ctl"><span>Mode</span><select data-ctl="mode" ${dis}>${
+      MODES.some(([m]) => m === live.mode) ? '' : option(live.mode ?? '', MODE_NAMES[live.mode ?? ''] ?? '—', true)
+    }${MODES.map(([m, label]) => option(m, label, m === (live.pendingMode ?? live.mode))).join('')}</select>${
+      live.pendingMode ? '<span class="ctl-note">from the next prompt</span>' : ''
+    }</label>
+    <div class="ctl ctx" title="${live.context?.tokens ? `${live.context.tokens.toLocaleString()} of ${(live.context.window ?? 0).toLocaleString()} tokens` : 'Fills in after the next reply'}">
+      <span>Context</span>${meter(percent ?? 0)}<span class="mono">${percent === undefined ? '—' : `${Math.round(percent)}%`}</span>
+      <button class="btn btn-quiet ctl-btn" type="button" data-act="compact" ${dis}>Compact now</button>
+    </div>
+    <button class="btn btn-quiet ctl-btn" type="button" data-act="agents" aria-expanded="${agentsOpen}">Agents ${agents.length ? `<span class="mono">${running}/${agents.length}</span>` : '<span class="mono">0</span>'}</button>
+    <button class="btn btn-quiet ctl-btn" type="button" data-act="commands" ${dis}>/ Commands</button>
+    ${
+      accounts.length
+        ? `<label class="ctl"><span>Account</span><select data-ctl="account" ${dis}>${current ? '' : option('', session.email ?? '—', true)}${accounts.map((a) => option(a.id, a.label, a.id === session.accountId)).join('')}</select></label>`
+        : ''
+    }`;
+  panel.hidden = !agentsOpen;
+  panel.innerHTML = agents.length
+    ? agents
+        .map(
+          (a) => `<div class="agent-row"><span class="dot ${a.status === 'running' ? 'pulse dot-run' : 'dot-off'}"></span><span class="agent-name">${esc(a.name ?? a.type)}</span><span class="agent-desc">${esc(a.description)}</span><span class="mono agent-status">${esc(a.status)}</span></div>`,
+        )
+        .join('')
+    : '<div class="empty-note">No subagents in this session yet.</div>';
+  paint(box);
+  drawResults();
+}
+
+/** Sends a control for the session on screen, and tells how it went when the session answers. */
+async function sendControl(action: SessionAction, what: string): Promise<string | undefined> {
+  const cur = selected();
+  if (!cur?.session) return undefined;
+  const ref = await remote!.control(cur.pc.id, cur.session.id, action);
+  pendingResults.set(ref, what);
+  drawResults();
+  return ref;
+}
+
+function drawResults(): void {
+  for (const [ref, what] of pendingResults) {
+    const r = remote!.results.get(ref);
+    if (!r) continue;
+    pendingResults.delete(ref);
+    if (what === 'commands') continue; // The sheet shows them.
+    toast(r.ok ? (r.text?.trim() ? r.text.trim().slice(0, 180) : `${what}: done.`) : `${what}: ${r.error ?? 'not done'}`);
+    if (what === 'Command' && commandSheet) {
+      commandSheet.output = r.ok ? r.text?.trim() || 'Done.' : `Not run: ${r.error}`;
+      drawCommandSheet();
+    }
+  }
+}
+
+/** The session's slash commands, to run one with arguments. */
+let commandSheet: { filter: string; picked?: string; output?: string } | undefined;
+
+function openCommandSheet(): void {
+  const cur = selected();
+  if (!cur?.session) return;
+  commandSheet = { filter: '' };
+  if (!remote!.sessionCommands(cur.pc.id, cur.session.id)) {
+    void sendControl({ kind: 'commands' }, 'commands');
+  }
+  drawCommandSheet(true);
+  $<HTMLInputElement>('cmd-filter').focus();
+}
+
+function drawCommandSheet(full = false): void {
+  if (!commandSheet) return;
+  const cur = selected();
+  const list = cur?.session ? remote!.sessionCommands(cur.pc.id, cur.session.id) : undefined;
+  const f = commandSheet.filter.toLowerCase();
+  const shown = (list ?? []).filter((c) => !f || c.name.toLowerCase().includes(f) || c.description.toLowerCase().includes(f)).slice(0, 120);
+  const rows = !list
+    ? '<div class="empty-note">Asking the session for its commands…</div>'
+    : shown.length
+      ? shown
+          .map(
+            (c) => `<button class="cmd-row" type="button" data-act="cmd-pick" data-v="${esc(c.name)}" aria-pressed="${c.name === commandSheet!.picked}"><span class="mono cmd-name">/${esc(c.name)}</span><span class="cmd-desc">${esc(c.description)}</span><span class="cmd-src">${esc(c.source)}</span></button>`,
+          )
+          .join('')
+      : '<div class="empty-note">No command matches.</div>';
+  if (full || !document.getElementById('cmd-list')) {
+    $('modal').innerHTML = `<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cmd-title">
+      <div class="sheet-head"><div><h2 id="cmd-title" class="serif">Commands</h2><p>The slash commands this session has. Pick one, add arguments if it takes any, and run it there.</p></div>
+        <button class="btn btn-ghost btn-icon" type="button" aria-label="Close" data-act="close"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
+      <label><span class="sr">Find a command</span><input class="input" id="cmd-filter" type="search" placeholder="Find a command" autocomplete="off"></label>
+      <div class="cmd-list" id="cmd-list"></div>
+      <div class="cmd-run"><span class="mono cmd-picked" id="cmd-picked"></span><label class="cmd-args"><span class="sr">Arguments</span><input class="input" id="cmd-args" type="text" maxlength="2000" placeholder="Arguments (optional)"></label><button class="btn btn-primary" type="button" data-act="cmd-run" id="cmd-run">Run</button></div>
+      <pre class="cmd-output" id="cmd-output" hidden></pre>
+    </div></div>`;
+  }
+  $('cmd-list').innerHTML = rows;
+  $('cmd-picked').textContent = commandSheet.picked ? `/${commandSheet.picked}` : 'Pick a command';
+  $<HTMLButtonElement>('cmd-run').disabled = !commandSheet.picked;
+  $('cmd-output').hidden = !commandSheet.output;
+  $('cmd-output').textContent = commandSheet.output ?? '';
+}
+
 // ---------- New session ----------
 
 /** A session started from this tab that its PC doesn’t list yet. */
@@ -545,6 +706,7 @@ function openSheet(): void {
 
 function closeSheet(): void {
   sheet = undefined;
+  commandSheet = undefined;
   $('modal').innerHTML = '';
 }
 
@@ -995,6 +1157,36 @@ document.addEventListener('click', (e) => {
     }
     case 'new':
       return openSheet();
+    case 'compact':
+      void sendControl({ kind: 'compact' }, 'Compact');
+      toast('Compacting once the session is idle…');
+      return;
+    case 'ctl-toggle':
+      controlsOpen = !controlsOpen;
+      controlsKey = '';
+      drawApp();
+      return;
+    case 'agents':
+      agentsOpen = !agentsOpen;
+      controlsKey = '';
+      drawApp();
+      return;
+    case 'commands':
+      return openCommandSheet();
+    case 'cmd-pick':
+      if (commandSheet) {
+        commandSheet.picked = el.dataset.v;
+        drawCommandSheet();
+        $<HTMLInputElement>('cmd-args').focus();
+      }
+      return;
+    case 'cmd-run':
+      if (commandSheet?.picked) {
+        commandSheet.output = `Running /${commandSheet.picked}…`;
+        void sendControl({ kind: 'command', name: commandSheet.picked, args: $<HTMLInputElement>('cmd-args').value.trim() }, 'Command');
+        drawCommandSheet();
+      }
+      return;
     case 'bell':
       void toggleNotifications();
       return;
@@ -1109,6 +1301,24 @@ document.addEventListener('drop', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  const control = (e.target as HTMLElement).closest?.('select[data-ctl]') as HTMLSelectElement | null;
+  const cur = selected();
+  if (control && cur?.session) {
+    const value = control.value;
+    const which = control.dataset.ctl!;
+    if (which === 'account') {
+      const label = control.selectedOptions[0]?.textContent ?? 'that account';
+      if (confirm(`Move "${cur.session.title}" to ${label}? It restarts on that account and carries on where it was.`)) {
+        void remote!.move(cur.pc.id, cur.session.id, value).then((ref) => pendingResults.set(ref, 'Move'));
+      }
+      controlsKey = '';
+      drawApp();
+    } else if (value) {
+      void sendControl({ kind: which as 'model' | 'effort' | 'mode', value }, which[0].toUpperCase() + which.slice(1));
+    }
+    control.blur();
+    return;
+  }
   const t = e.target as HTMLInputElement;
   if (t.id === 'file-input' && t.files) {
     void addImages([...t.files]);
@@ -1140,6 +1350,10 @@ document.addEventListener('input', (e) => {
       sheet.error = undefined;
       $('n-status').textContent = '';
     }
+  }
+  if (t.id === 'cmd-filter' && commandSheet) {
+    commandSheet.filter = (t as HTMLInputElement).value;
+    drawCommandSheet();
   }
   if (p && t.id === 'card-note') {
     cardOf(p).note = (t as HTMLInputElement).value;
