@@ -1,4 +1,4 @@
-import { Keys, deriveKeys, normalizeUsername, seal, unseal } from './crypto';
+import { Keys, deriveKeys, normalizeUsername, seal, toBase64, unseal } from './crypto';
 import { Down, DownMessage, PcState, PromptAnswer, Row, UpMessage, downLabel, stateLabel, upLabel } from './types';
 
 /** A PC as the relay reports it, with its state once decrypted. */
@@ -23,7 +23,7 @@ export interface Reply {
   pc: string;
   session: string;
   text: string;
-  status: 'sending' | 'queued' | 'delivered' | 'refused';
+  status: 'uploading' | 'sending' | 'queued' | 'delivered' | 'refused';
   reason?: string;
   at: number;
 }
@@ -42,6 +42,8 @@ export class Remote {
   readonly transcripts = new Map<string, Transcript>();
   /** Replies sent from this tab, by message id. */
   readonly replies = new Map<string, Reply>();
+  /** Sessions started from this tab, by message id. */
+  readonly starts = new Map<string, { pc: string; status: 'starting' | 'started' | 'refused'; session?: string; reason?: string }>();
   /** Answers sent to Claude's prompts, by prompt id: in flight, or why the PC refused one. */
   readonly answers = new Map<string, { ref: string; error?: string }>();
   connected = false;
@@ -67,7 +69,11 @@ export class Remote {
   }
 
   static async signIn(username: string, password: string, onProgress?: (fraction: number) => void): Promise<Remote> {
-    const keys = await deriveKeys(username, password, onProgress);
+    return Remote.withKeys(username, await deriveKeys(username, password, onProgress));
+  }
+
+  /** Signs in with keys already derived (from the password, or kept under this device's passkey). */
+  static async withKeys(username: string, keys: Keys): Promise<Remote> {
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -123,15 +129,56 @@ export class Remote {
     return this.transcripts.get(key(pc, session));
   }
 
+  /** A signed-in call to the vault's own API (notifications). */
+  async api<T = unknown>(path: string, method = 'GET', body?: unknown): Promise<T> {
+    const res = await fetch(path, {
+      method,
+      headers: { authorization: `Bearer ${this.session}`, ...(body !== undefined && { 'content-type': 'application/json' }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      throw new Error(json.error ?? `The vault answered ${res.status}.`);
+    }
+    return json as T;
+  }
+
   /** Sends a reply to a session; the PC reports it queued, then delivered (or refused). */
-  async send(pc: string, session: string, text: string): Promise<void> {
+  async send(pc: string, session: string, text: string, images: { blob: Blob; mime: string }[] = []): Promise<void> {
     const id = crypto.randomUUID();
+    this.replies.set(id, { pc, session, text, status: images.length ? 'uploading' : 'sending', at: Date.now() });
+    this.changed();
+    const uploaded: string[] = [];
+    for (const image of images) {
+      const upload = await this.upload(pc, session, image.blob, image.mime);
+      if (!upload) {
+        this.replies.set(id, { pc, session, text, status: 'refused', reason: 'An image couldn’t be sent to the PC.', at: Date.now() });
+        this.changed();
+        return;
+      }
+      uploaded.push(upload);
+    }
     this.replies.set(id, { pc, session, text, status: 'sending', at: Date.now() });
     this.changed();
-    if (!(await this.tell(pc, { type: 'send', session, text }, id))) {
+    if (!(await this.tell(pc, { type: 'send', session, text, ...(uploaded.length && { images: uploaded }) }, id))) {
       this.replies.set(id, { pc, session, text, status: 'refused', reason: 'The PC couldn’t be reached.', at: Date.now() });
       this.changed();
     }
+  }
+
+  /** Sends an image to a PC in parts (each well within the relay's limit); resolves its id, or nothing if a part failed. */
+  private async upload(pc: string, session: string, blob: Blob, mime: string): Promise<string | undefined> {
+    const id = crypto.randomUUID();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const size = 96 * 1024;
+    const parts = Math.max(1, Math.ceil(bytes.length / size));
+    for (let part = 0; part < parts; part++) {
+      const data = toBase64(bytes.subarray(part * size, (part + 1) * size));
+      if (!(await this.tell(pc, { type: 'upload', session, upload: id, part, parts, mime, data }))) {
+        return undefined;
+      }
+    }
+    return id;
   }
 
   /** The newest reply sent to a session from this tab. */
@@ -148,6 +195,23 @@ export class Remote {
       this.answers.set(prompt, { ref, error: 'The PC couldn’t be reached.' });
       this.changed();
     }
+  }
+
+  /** Starts a session on a PC; `starts` follows it to its id (or why not). */
+  async start(pc: string, account: string, repo: string, text: string): Promise<string> {
+    const ref = crypto.randomUUID();
+    this.starts.set(ref, { pc, status: 'starting' });
+    this.changed();
+    if (!(await this.tell(pc, { type: 'start', account, repo, text }, ref))) {
+      this.starts.set(ref, { pc, status: 'refused', reason: 'The PC couldn’t be reached.' });
+      this.changed();
+    }
+    return ref;
+  }
+
+  /** Asks a session to end the turn it's running. */
+  stop(pc: string, session: string): void {
+    void this.tell(pc, { type: 'stop', session });
   }
 
   setRemote(pc: string, session: string, on: boolean): void {
@@ -256,8 +320,10 @@ export class Remote {
       }
       const before = this.pcs.get(data.id);
       this.pcs.set(data.id, pc);
-      // Back online, or its agent restarted (a new epoch): ask again for the session on screen.
-      const fresh = pc.online && (!before?.online || before.state?.epoch !== pc.state?.epoch);
+      // Back online, its agent restarted (a new epoch), or the session on screen just appeared (one started from
+      // here): ask again for it.
+      const appeared = (s?: PcState) => !!this.watching && !!s?.sessions.some((x) => x.id === this.watching!.session);
+      const fresh = pc.online && (!before?.online || before.state?.epoch !== pc.state?.epoch || (appeared(pc.state) && !appeared(before?.state)));
       if (fresh && this.watching?.pc === data.id) {
         void this.tell(data.id, { type: 'watch', session: this.watching.session, reset: true });
       }
@@ -278,6 +344,11 @@ export class Remote {
           loaded: true,
           missing: msg.missing,
         });
+      } else if (msg.type === 'started') {
+        const start = this.starts.get(msg.ref);
+        if (start) {
+          this.starts.set(msg.ref, { pc: start.pc, status: msg.session ? 'started' : 'refused', session: msg.session, reason: msg.reason });
+        }
       } else if (msg.type === 'answered') {
         for (const [prompt, a] of this.answers) {
           if (a.ref === msg.ref) {

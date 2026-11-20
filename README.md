@@ -5,7 +5,11 @@ Every Claude session on all your PCs, on all your accounts, in one browser windo
 - **Watch** every session's transcript live, with each account's usage.
 - **Reply** to a session: on a PC with `claudeSwitcher.remoteReplies` on, flip the session's **Remote** switch. Your reply goes in as your own prompt once Claude is idle.
 - **Answer Claude's prompts** in Remote sessions: allow or deny a tool, answer a question, approve a plan.
-- Starting a session for an account in a repo comes next.
+- **Send images** with a reply: paste, drop or attach up to 4.
+- **Stop** a Remote session mid-turn.
+- **Get notified** when Claude is waiting on you (the bell), even with the app closed. Install it from the browser (on iPhone: Share, then Add to Home Screen) for an app of its own.
+- **Unlock with a passkey** on a device you choose to remember.
+- **Start a session**: pick a PC, a long-lived-token account and one of the folders that PC allows (`claudeSwitcher.remoteRepos`), and write the first message.
 
 ## How it works
 

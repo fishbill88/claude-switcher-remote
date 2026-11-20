@@ -18,7 +18,13 @@ const utf8 = new TextEncoder();
 
 export const normalizeUsername = (u: string) => u.trim().toLowerCase();
 
-export async function deriveKeys(username: string, password: string, onProgress?: (fraction: number) => void): Promise<Keys> {
+/** `keepRaw` also returns the encryption key's bytes, for "remember on this device" to keep under a passkey. */
+export async function deriveKeys(
+  username: string,
+  password: string,
+  onProgress?: (fraction: number) => void,
+  keepRaw = false,
+): Promise<Keys & { rawEnc?: Uint8Array }> {
   const salt = `claude-switcher/v1/${normalizeUsername(username)}`;
   const master = await scryptAsync(utf8.encode(password.normalize('NFKC')), utf8.encode(salt), {
     N: 2 ** 16,
@@ -29,8 +35,13 @@ export async function deriveKeys(username: string, password: string, onProgress?
   });
   const sub = (info: string) => hkdf(sha256, master, new Uint8Array(0), utf8.encode(info), 32);
   const authKey = toBase64(sub('auth'));
-  const encKey = await crypto.subtle.importKey('raw', bytes(sub('enc')), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const raw = sub('enc');
+  const encKey = await crypto.subtle.importKey('raw', bytes(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
   master.fill(0);
+  if (keepRaw) {
+    return { authKey, encKey, rawEnc: raw };
+  }
+  raw.fill(0);
   return { authKey, encKey };
 }
 

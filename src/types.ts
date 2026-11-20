@@ -16,6 +16,8 @@ export interface Account {
   plan?: string;
   limits: Limit[];
   seenAtMs?: number;
+  /** A long-lived-token account: a new session can be started on it. */
+  pinnable?: boolean;
 }
 
 export interface Session {
@@ -42,6 +44,8 @@ export interface PcState {
   replies?: boolean;
   /** Claude's prompts waiting for an answer, in sessions with Remote on. */
   prompts?: Prompt[];
+  /** Folders this app may start a session in. */
+  repos?: { name: string; path: string }[];
 }
 
 export interface Prompt {
@@ -79,14 +83,18 @@ export type Down =
   | { type: 'watch'; session: string; reset?: boolean }
   | { type: 'unwatch'; session: string }
   | { type: 'remote'; session: string; on: boolean }
-  | { type: 'send'; session: string; text: string }
-  | { type: 'answer'; session: string; prompt: string; answer: PromptAnswer };
+  | { type: 'send'; session: string; text: string; images?: string[] }
+  | { type: 'upload'; session: string; upload: string; part: number; parts: number; mime: string; data: string }
+  | { type: 'answer'; session: string; prompt: string; answer: PromptAnswer }
+  | { type: 'start'; account: string; repo: string; text: string }
+  | { type: 'stop'; session: string };
 export type DownMessage = { id: string; at: number; epoch: string } & Down;
 export type SendStatus = 'queued' | 'delivered' | 'refused';
 export type UpMessage = { id: string; at: number } & (
   | { type: 'rows'; session: string; rows: Row[]; reset: boolean; missing?: boolean }
   | { type: 'sent'; session: string; ref: string; status: SendStatus; reason?: string }
   | { type: 'answered'; session: string; ref: string; reason: string }
+  | { type: 'started'; ref: string; session?: string; reason?: string }
 );
 
 export const stateLabel = (pc: string) => `relay:state:${pc}`;
