@@ -1,0 +1,15 @@
+{
+  "note": "Made by Claude Account Switcher (src/vault.ts). Regenerate with the extension; do not edit.",
+  "username": " Me@Example.com ",
+  "password": "correct horse battery staple ✓",
+  "authKey": "+x+DdyvvmpaOH2AsNiuXMUnl9JvhKy4JiocG5BcMQSs=",
+  "label": "relay:state:pc-vector-0001",
+  "plain": {
+    "v": 1,
+    "pc": {
+      "name": "Desk PC"
+    },
+    "emoji": "✓"
+  },
+  "sealed": "AeTEbESA43NZziYP2fDI_Kb7mldU8kkWYjziF6SOjsLO7zud8WeyXjiwYwec92U9Evw62kIBZ48VRnvhMlagwNfKgrvqZj0YTfg"
+}

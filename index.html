@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#0A0B0D">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Every Claude session on every PC and account, in one window.">
+  <title>Switcher Remote</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%230A0B0D' stroke='%23ECEDEE' stroke-opacity='.4'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23ECEDEE'/%3E%3Ccircle cx='16' cy='3' r='3' fill='%23FFB547'/%3E%3C/svg%3E">
+  <script type="module" src="./src/main.ts"></script>
+</head>
+<body>
+
+<svg width="0" height="0" class="sprite" aria-hidden="true">
+  <symbol id="i-lock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></g></symbol>
+  <symbol id="i-pc" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></g></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-claude" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></g></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-logo" viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="none" stroke="#ECEDEE" stroke-opacity=".25"/><circle cx="16" cy="16" r="9" fill="none" stroke="#ECEDEE" stroke-opacity=".5"/><circle cx="16" cy="16" r="3.5" fill="#ECEDEE"/><circle cx="16" cy="1" r="2.5" fill="#FFB547"/><circle cx="25" cy="16" r="2" fill="#7CC4FF"/></symbol>
+</svg>
+
+<!-- ================= Unlock ================= -->
+<div class="hero" id="hero">
+  <div class="grid-bg" aria-hidden="true"></div>
+  <div class="wrap">
+    <header class="top rise">
+      <div class="brand"><svg width="32" height="32" aria-hidden="true"><use href="#i-logo"/></svg>Switcher Remote</div>
+      <div class="hero-note"><svg width="16" height="16" aria-hidden="true"><use href="#i-lock"/></svg>End-to-end encrypted · relay on your vault server</div>
+    </header>
+
+    <main class="hero-main">
+      <section class="hero-copy">
+        <h1 class="display serif">
+          <span class="rise d2">Every account.</span>
+          <span class="rise d3">Every session.</span>
+          <span class="rise d4"><em>One window.</em></span>
+        </h1>
+        <p class="lede rise d5">Watch the Claude sessions on all your PCs, on all your accounts, without switching logins. Your vault password unlocks it here; the relay only ever sees encrypted data.</p>
+        <form class="unlock rise d6" id="unlock" novalidate>
+          <div class="fields">
+            <label class="field"><span>Vault username</span><input class="input" id="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
+            <label class="field"><span>Vault password</span><input class="input" id="password" type="password" autocomplete="current-password" required></label>
+          </div>
+          <p class="form-error" id="unlock-error" role="alert" hidden></p>
+          <div class="unlock-row">
+            <button class="btn btn-primary" type="submit" id="unlock-btn">Unlock <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <span class="unlock-note">Keys are derived in this browser and kept only while this tab is open.</span>
+          </div>
+        </form>
+      </section>
+
+      <section class="stage-wrap stage-in" aria-hidden="true">
+        <div class="stage">
+          <div class="ring ring-0"></div>
+          <div class="ring ring-1"></div>
+          <div class="ring ring-2"></div>
+          <div class="orbit slow" id="orbit-pcs"></div>
+          <div class="orbit" id="orbit-accs"></div>
+          <div class="hub">
+            <div class="hub-ring"></div><div class="hub-ring r2"></div>
+            <div class="hub-core"><span class="serif hub-label">Relay</span><span class="mono hub-sub">encrypted only</span></div>
+          </div>
+          <div class="float-card f2 float-live">
+            <span class="float-top">Live<span class="dots"><i></i><i></i><i></i></span></span>
+            <span class="shimmer fs13">Claude is working…</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="stats rise d6">
+      <div><b>Every PC</b><span>wherever VS Code is open and sharing</span></div>
+      <div><b>Every account</b><span>side by side, no switching</span></div>
+      <div><b>Encrypted</b><span>in your PCs and this browser, nowhere else</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= App ================= -->
+<div class="app" id="app" hidden data-view="list" data-tab="sessions">
+  <header class="bar app-in">
+    <div class="brand brand-sm"><svg width="28" height="28" aria-hidden="true"><use href="#i-logo"/></svg>Switcher Remote</div>
+    <div class="usage" id="usage"></div>
+    <div class="bar-end">
+      <span class="conn" id="conn" role="status"></span>
+      <button class="btn btn-ghost btn-icon" type="button" aria-label="Lock" data-act="lock"><svg width="18" height="18" aria-hidden="true"><use href="#i-lock"/></svg></button>
+    </div>
+  </header>
+
+  <div class="cols">
+    <nav class="panel col rail app-in a1" aria-label="Sessions">
+      <div class="col-head"><h2>Sessions</h2><span class="mono dim-count" id="session-count"></span></div>
+      <div class="scroll rail-list" id="rail"></div>
+    </nav>
+
+    <main class="panel col main app-in a2">
+      <div class="main-head" id="main-head"></div>
+      <div class="scroll" id="transcript-box"><div class="transcript" id="transcript"></div></div>
+      <section class="response" id="response" aria-label="Your response"></section>
+    </main>
+
+    <aside class="panel col side app-in a3" aria-label="Accounts and PCs">
+      <div class="col-head start"><h2>Accounts</h2></div>
+      <div class="scroll">
+        <div id="accounts" class="accounts"></div>
+        <div class="pcs"><h3>PCs</h3><div id="pcs"></div></div>
+      </div>
+    </aside>
+  </div>
+
+  <nav class="tabbar" aria-label="Views">
+    <button type="button" data-act="tab" data-v="sessions" aria-pressed="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Sessions
+    </button>
+    <button type="button" data-act="tab" data-v="needs" aria-pressed="false">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pc"/></svg>Accounts &amp; PCs
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><div><svg width="16" height="16" aria-hidden="true"><use href="#i-check"/></svg><span></span></div></div>
+
+</body>
+</html>
