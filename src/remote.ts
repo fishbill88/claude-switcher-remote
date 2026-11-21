@@ -47,7 +47,7 @@ export class Remote {
   /** Each session's slash commands, once asked for. */
   readonly commands = new Map<string, CommandInfo[]>();
   /** Sessions started from this tab, by message id. */
-  readonly starts = new Map<string, { pc: string; status: 'starting' | 'started' | 'refused'; session?: string; reason?: string }>();
+  readonly starts = new Map<string, { pc: string; status: 'starting' | 'started' | 'refused'; session?: string; reason?: string; note?: string }>();
   /** Answers sent to Claude's prompts, by prompt id: in flight, or why the PC refused one. */
   readonly answers = new Map<string, { ref: string; error?: string }>();
   connected = false;
@@ -380,7 +380,7 @@ export class Remote {
       } else if (msg.type === 'started') {
         const start = this.starts.get(msg.ref);
         if (start) {
-          this.starts.set(msg.ref, { pc: start.pc, status: msg.session ? 'started' : 'refused', session: msg.session, reason: msg.reason });
+          this.starts.set(msg.ref, { pc: start.pc, status: msg.session ? 'started' : 'refused', session: msg.session, reason: msg.reason, note: msg.note });
         }
       } else if (msg.type === 'answered') {
         for (const [prompt, a] of this.answers) {

@@ -726,6 +726,7 @@ function drawSheet(full = false): void {
     const target = { pc: start.pc, session: start.session };
     closeSheet();
     openSession(target.pc, target.session);
+    if (start.note) toast(start.note); // Something on the PC to do first, such as trusting the folder.
     return;
   }
   const busy = start?.status === 'starting';
@@ -1026,7 +1027,11 @@ function drawTranscript(): void {
   } else if (t.missing) {
     $('transcript').innerHTML = `<div class="empty-big"><span>This session’s transcript isn’t on ${esc(pcName(remote!.pcs.get(sel.pc)!))} any more.</span></div>`;
   } else if (!t.rows.length) {
-    $('transcript').innerHTML = `<div class="empty-big"><span>Nothing in this session yet.</span></div>`;
+    const begun = [...remote!.starts.values()].find((st) => st.pc === sel.pc && st.session === sel.session);
+    const empty = begun
+      ? `Claude is starting on ${esc(pcName(remote!.pcs.get(sel.pc)!))}. Your first message goes in as soon as it’s ready.${begun.note ? `<br><br>${esc(begun.note)}` : ''}`
+      : 'Nothing in this session yet.';
+    $('transcript').innerHTML = `<div class="empty-big"><span>${empty}</span></div>`;
   } else {
     // Rows already on screen stay still; only new ones rise in.
     const from = same && ui.drawn.loaded ? Math.min(ui.drawn.count, t.rows.length) : 0;

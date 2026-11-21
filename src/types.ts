@@ -123,7 +123,7 @@ export type UpMessage = { id: string; at: number } & (
   | { type: 'rows'; session: string; rows: Row[]; reset: boolean; missing?: boolean }
   | { type: 'sent'; session: string; ref: string; status: SendStatus; reason?: string }
   | { type: 'answered'; session: string; ref: string; reason: string }
-  | { type: 'started'; ref: string; session?: string; reason?: string }
+  | { type: 'started'; ref: string; session?: string; reason?: string; note?: string }
   | { type: 'action'; session: string; ref: string; ok: boolean; text?: string; error?: string; commands?: CommandInfo[] }
 );
 
