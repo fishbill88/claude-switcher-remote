@@ -17,6 +17,23 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '
 const icon = (id: string, size = 16) => `<svg width="${size}" height="${size}" aria-hidden="true"><use href="#${id}"/></svg>`;
 const meter = (percent: number) => `<span class="meter ${percent >= 80 ? 'hot' : ''}"><b data-w="${Math.round(Math.min(100, Math.max(0, percent || 0)))}"></b></span>`;
 const phone = matchMedia('(max-width: 760px)');
+
+// Tablets: accounts slide over from the right edge, and the session list can be hidden to give the transcript the width.
+let drawerOpen = false;
+let railHidden = false;
+function setDrawer(open: boolean): void {
+  drawerOpen = open;
+  $('app').dataset.drawer = open ? 'open' : '';
+  $('acc-btn').setAttribute('aria-expanded', String(open));
+  if (open) setTimeout(() => $('side').querySelector<HTMLElement>('.close')?.focus({ preventScroll: true }), 300);
+}
+function setRail(hidden: boolean): void {
+  railHidden = hidden;
+  $('app').dataset.rail = hidden ? 'hidden' : '';
+  const b = document.querySelector('.rail-btn');
+  b?.setAttribute('aria-label', `${hidden ? 'Show' : 'Hide'} sessions`);
+  b?.setAttribute('aria-expanded', String(!hidden));
+}
 const USERNAME_KEY = 'switcher-remote.username';
 /** Account colours, in label order: told apart by name too, never by colour alone. */
 const HUES = ['#7CC4FF', '#B9A3FF', '#7FE0C2', '#FF9EB5', '#FFD07A', '#9FE870', '#FFA98A', '#A5B4FF'];
@@ -367,6 +384,7 @@ function drawMain(): void {
   $('main-head').hidden = false;
   $('response').hidden = false;
   $('main-head').innerHTML = `
+    <button class="btn btn-ghost btn-icon tab-only rail-btn" type="button" data-act="rail" aria-label="${railHidden ? 'Show' : 'Hide'} sessions" aria-expanded="${!railHidden}"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M15.5 10l-2 2 2 2"/></g></svg></button>
     <button class="btn btn-ghost btn-icon back" type="button" data-act="back" aria-label="Back to sessions">${icon('i-back', 22)}</button>
     <div class="head-text">
       <h2>${esc(session?.title ?? (startingHere(pc.id, ui.sel!.session) ? 'Starting…' : 'Closed session'))}</h2>
@@ -1140,6 +1158,10 @@ document.addEventListener('click', (e) => {
       return openSession(el.dataset.pc!, el.dataset.id!);
     case 'back':
       return goBack();
+    case 'drawer':
+      return setDrawer(!drawerOpen);
+    case 'rail':
+      return setRail(!railHidden);
     case 'tab':
       $('app').dataset.tab = el.dataset.v!;
       document.querySelectorAll('.tabbar button').forEach((b) => b.setAttribute('aria-pressed', String(b === el)));
@@ -1368,6 +1390,10 @@ document.addEventListener('input', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && sheet) {
     closeSheet();
+    return;
+  }
+  if (e.key === 'Escape' && drawerOpen) {
+    setDrawer(false);
     return;
   }
   // Enter sends; Shift+Enter is a new line.

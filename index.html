@@ -97,6 +97,7 @@
     <div class="brand brand-sm"><svg width="28" height="28" aria-hidden="true"><use href="#i-logo"/></svg>Switcher Remote</div>
     <div class="usage" id="usage"></div>
     <div class="bar-end">
+      <button class="btn btn-ghost tab-only acc-btn" type="button" data-act="drawer" id="acc-btn" aria-expanded="false" aria-controls="side"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M4 12h16M4 17h7"/><circle cx="17" cy="7" r="2"/><circle cx="14" cy="17" r="2"/></g></svg><span class="label-text">Accounts</span></button>
       <button class="btn btn-primary btn-new" type="button" data-act="new" id="new-btn" aria-label="New session" hidden><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span class="label-text">New session</span></button>
       <button class="btn btn-ghost btn-icon" type="button" data-act="bell" id="bell" aria-label="Notifications" aria-pressed="false" hidden><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10.3 20a2 2 0 0 0 3.4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <span class="conn" id="conn" role="status"></span>
@@ -118,8 +119,8 @@
       <section class="response" id="response" aria-label="Your response"></section>
     </main>
 
-    <aside class="panel col side app-in a3" aria-label="Accounts and PCs">
-      <div class="col-head start"><h2>Accounts</h2></div>
+    <aside class="panel col side app-in a3" id="side" aria-label="Accounts and PCs">
+      <div class="col-head start"><h2>Accounts</h2><button class="btn btn-ghost btn-icon tab-only close" type="button" data-act="drawer" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></div>
       <div class="scroll">
         <div id="accounts" class="accounts"></div>
         <div class="pcs"><h3>PCs</h3><div id="pcs"></div></div>
@@ -127,6 +128,7 @@
     </aside>
   </div>
 
+  <div class="drawer-scrim" data-act="drawer" aria-hidden="true"></div>
   <nav class="tabbar" aria-label="Views">
     <button type="button" data-act="tab" data-v="sessions" aria-pressed="true">
       <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Sessions
