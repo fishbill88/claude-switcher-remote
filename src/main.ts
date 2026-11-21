@@ -371,6 +371,8 @@ function drawMain(): void {
     $('agents-panel').hidden = true;
     controlsKey = '';
     ui.drawn = { key: '', rows: undefined, loaded: false, count: 0 };
+    $('pin-msg').textContent = '';
+    $('pinbar').classList.remove('on');
     $('transcript').innerHTML = pcList().length
       ? `<div class="empty-big"><span class="serif">Pick a session</span><span>Its transcript appears here and follows along live.</span></div>`
       : `<div class="empty-big"><span class="serif">No PCs yet</span><span>In VS Code on each PC, connect to this vault and turn on <code>claudeSwitcher.remoteSessions</code>. Its sessions show up here within seconds.</span></div>`;
@@ -1040,6 +1042,7 @@ function drawTranscript(): void {
     return; // Nothing new: leave the pane alone (and any text being selected in it).
   }
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  $('pin-msg').textContent = ''; // Set again below when there are rows.
   if (!t?.loaded) {
     $('transcript').innerHTML = `<div class="loading-rows"><span class="dots"><i></i><i></i><i></i></span>Loading the transcript…</div>`;
   } else if (t.missing) {
@@ -1054,9 +1057,13 @@ function drawTranscript(): void {
     // Rows already on screen stay still; only new ones rise in.
     const from = same && ui.drawn.loaded ? Math.min(ui.drawn.count, t.rows.length) : 0;
     const stagger = from === 0;
+    const lastUser = t.rows.map((r) => r.t).lastIndexOf('user');
+    const mark = (i: number) => (i === lastUser ? ' id="last-user"' : '');
     $('transcript').innerHTML = t.rows
-      .map((r, i) => (i < from ? `<div>${row(r)}</div>` : `<div class="row-in" data-delay="${stagger ? Math.max(0, Math.min(i - (t.rows.length - 8), 8)) * 40 : (i - from) * 40}">${row(r)}</div>`))
+      .map((r, i) => (i < from ? `<div${mark(i)}>${row(r)}</div>` : `<div${mark(i)} class="row-in" data-delay="${stagger ? Math.max(0, Math.min(i - (t.rows.length - 8), 8)) * 40 : (i - from) * 40}">${row(r)}</div>`))
       .join('');
+    const last = t.rows[lastUser];
+    $('pin-msg').textContent = last?.t === 'user' ? last.text : '';
   }
   // Opening a session (or its rows arriving) lands on the newest; new rows follow along only if you were at the bottom.
   const firstRows = !same || !ui.drawn.loaded;
@@ -1065,7 +1072,25 @@ function drawTranscript(): void {
     box.scrollTo({ top: box.scrollHeight, behavior: firstRows ? 'auto' : 'smooth' });
   }
   ui.drawn = { key, rows: t?.rows, loaded: !!t?.loaded, count: t?.rows.length ?? 0 };
+  placePin();
 }
+
+/**
+ * The last message you sent stays in sight: once it has scrolled up out of view, a copy sits at the top of the
+ * transcript (like VS Code's Claude chat), and tapping it scrolls back to it. A bar over the pane, so nothing moves.
+ */
+function placePin(): void {
+  const msg = document.getElementById('last-user');
+  const box = $('transcript-box');
+  const on = !!msg && !!$('pin-msg').textContent && msg.getBoundingClientRect().bottom < box.getBoundingClientRect().top + 8;
+  $('pinbar').classList.toggle('on', on);
+  $('pin-msg').tabIndex = on ? 0 : -1;
+}
+let pinFrame = 0;
+$('transcript-box').addEventListener('scroll', () => {
+  cancelAnimationFrame(pinFrame);
+  pinFrame = requestAnimationFrame(placePin);
+}, { passive: true });
 
 function row(r: Row): string {
   switch (r.t) {
@@ -1160,6 +1185,12 @@ document.addEventListener('click', (e) => {
       return goBack();
     case 'drawer':
       return setDrawer(!drawerOpen);
+    case 'pin-jump': {
+      const box = $('transcript-box');
+      const msg = document.getElementById('last-user');
+      if (msg) box.scrollTo({ top: box.scrollTop + msg.getBoundingClientRect().top - box.getBoundingClientRect().top - 12, behavior: 'smooth' });
+      return;
+    }
     case 'rail':
       return setRail(!railHidden);
     case 'tab':
