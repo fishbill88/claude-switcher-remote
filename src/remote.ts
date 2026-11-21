@@ -19,7 +19,7 @@ export interface Transcript {
 }
 
 /** Rows kept per session, as the PC sends them. */
-const KEEP_ROWS = 50;
+const KEEP_ROWS = 200;
 
 export class SignInError extends Error {}
 

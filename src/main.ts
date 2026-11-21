@@ -1055,15 +1055,17 @@ function drawTranscript(): void {
     $('transcript').innerHTML = `<div class="empty-big"><span>${empty}</span></div>`;
   } else {
     // Rows already on screen stay still; only new ones rise in.
-    const from = same && ui.drawn.loaded ? Math.min(ui.drawn.count, t.rows.length) : 0;
+    const all = finalOnly(t.rows);
+    const shown = all.slice(-SHOW_MESSAGES);
+    const from = same && ui.drawn.loaded ? Math.min(ui.drawn.count, shown.length) : 0;
     const stagger = from === 0;
-    const lastUser = t.rows.map((r) => r.t).lastIndexOf('user');
+    const lastUser = shown.map((r) => r.t).lastIndexOf('user');
     const mark = (i: number) => (i === lastUser ? ' id="last-user"' : '');
-    const older = t.trimmed ? `<div class="older-note">Earlier messages are in VS Code on ${esc(pcName(remote!.pcs.get(sel.pc)!))}.</div>` : '';
-    $('transcript').innerHTML = older + t.rows
-      .map((r, i) => (i < from ? `<div${mark(i)}>${row(r)}</div>` : `<div${mark(i)} class="row-in" data-delay="${stagger ? Math.max(0, Math.min(i - (t.rows.length - 8), 8)) * 40 : (i - from) * 40}">${row(r)}</div>`))
+    const older = t.trimmed || all.length > shown.length ? `<div class="older-note">Earlier messages are in VS Code on ${esc(pcName(remote!.pcs.get(sel.pc)!))}.</div>` : '';
+    $('transcript').innerHTML = older + shown
+      .map((r, i) => (i < from ? `<div${mark(i)}>${row(r)}</div>` : `<div${mark(i)} class="row-in" data-delay="${stagger ? Math.max(0, Math.min(i - (shown.length - 8), 8)) * 40 : (i - from) * 40}">${row(r)}</div>`))
       .join('');
-    const last = t.rows[lastUser];
+    const last = shown[lastUser];
     $('pin-msg').textContent = last?.t === 'user' ? last.text : '';
   }
   // Opening a session (or its rows arriving) lands on the newest; new rows follow along only if you were at the bottom.
@@ -1072,7 +1074,7 @@ function drawTranscript(): void {
     ui.follow = false;
     box.scrollTo({ top: box.scrollHeight, behavior: firstRows ? 'auto' : 'smooth' });
   }
-  ui.drawn = { key, rows: t?.rows, loaded: !!t?.loaded, count: t?.rows.length ?? 0 };
+  ui.drawn = { key, rows: t?.rows, loaded: !!t?.loaded, count: t?.rows ? Math.min(finalOnly(t.rows).length, SHOW_MESSAGES) : 0 };
   placePin();
 }
 
@@ -1092,6 +1094,21 @@ $('transcript-box').addEventListener('scroll', () => {
   cancelAnimationFrame(pinFrame);
   pinFrame = requestAnimationFrame(placePin);
 }, { passive: true });
+
+/**
+ * What the web app shows of a session: your messages, Claude's last words before each of them (its answer), and its
+ * plans and questions. Tool calls, edits and the steps in between stay in VS Code.
+ */
+/** Messages shown per session; the rest of the conversation is in VS Code. */
+const SHOW_MESSAGES = 50;
+
+function finalOnly(rows: Row[]): Row[] {
+  return rows.filter((r, i) => {
+    if (r.t !== 'text') return r.t === 'user' || r.t === 'plan' || r.t === 'question';
+    const next = rows.slice(i + 1).find((x) => x.t === 'text' || x.t === 'user');
+    return !next || next.t === 'user';
+  });
+}
 
 function row(r: Row): string {
   switch (r.t) {
