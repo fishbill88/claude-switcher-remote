@@ -14,7 +14,12 @@ export interface Transcript {
   rows: Row[];
   loaded: boolean;
   missing?: boolean;
+  /** Older rows were left out: only the latest are kept. */
+  trimmed?: boolean;
 }
+
+/** Rows kept per session, as the PC sends them. */
+const KEEP_ROWS = 50;
 
 export class SignInError extends Error {}
 
@@ -368,7 +373,9 @@ export class Remote {
         const k = key(data.pc, msg.session);
         const current = this.transcripts.get(k);
         this.transcripts.set(k, {
-          rows: msg.reset ? msg.rows : [...(current?.rows ?? []), ...msg.rows],
+          // The latest rows only; the whole conversation stays on the PC.
+          rows: (msg.reset ? msg.rows : [...(current?.rows ?? []), ...msg.rows]).slice(-KEEP_ROWS),
+          trimmed: (msg.reset ? msg.rows.length : (current?.rows.length ?? 0) + msg.rows.length) >= KEEP_ROWS || (!msg.reset && !!current?.trimmed),
           loaded: true,
           missing: msg.missing,
         });

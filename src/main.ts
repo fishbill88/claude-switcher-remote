@@ -1059,7 +1059,8 @@ function drawTranscript(): void {
     const stagger = from === 0;
     const lastUser = t.rows.map((r) => r.t).lastIndexOf('user');
     const mark = (i: number) => (i === lastUser ? ' id="last-user"' : '');
-    $('transcript').innerHTML = t.rows
+    const older = t.trimmed ? `<div class="older-note">Earlier messages are in VS Code on ${esc(pcName(remote!.pcs.get(sel.pc)!))}.</div>` : '';
+    $('transcript').innerHTML = older + t.rows
       .map((r, i) => (i < from ? `<div${mark(i)}>${row(r)}</div>` : `<div${mark(i)} class="row-in" data-delay="${stagger ? Math.max(0, Math.min(i - (t.rows.length - 8), 8)) * 40 : (i - from) * 40}">${row(r)}</div>`))
       .join('');
     const last = t.rows[lastUser];
